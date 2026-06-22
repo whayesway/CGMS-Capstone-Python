@@ -270,46 +270,27 @@ def go_home() -> None:
     st.rerun()
 
 
-def render_menu() -> None:
-    st.sidebar.title("Menu")
-
-    if st.sidebar.button("Home", key="menu_home", use_container_width=True):
-        go_home()
-    if st.session_state.path and st.sidebar.button(
-        "← Back", key="menu_back", use_container_width=True
-    ):
-        go_back()
-
-    st.sidebar.markdown("### Topics")
-    for index, item in enumerate(DATA):
-        if st.sidebar.button(
-            item["title"], key=f"menu_topic_{index}", use_container_width=True
+def render_topic_list(items: list[dict[str, Any]], key_prefix: str) -> None:
+    for index, item in enumerate(items):
+        if st.button(
+            item["title"],
+            key=f"{key_prefix}_{index}",
+            use_container_width=True,
         ):
-            st.session_state.path = [index]
-            st.rerun()
-
-    node = get_node(st.session_state.path)
-    children = node.get("children", []) if node else []
-    if children:
-        st.sidebar.divider()
-        st.sidebar.markdown("### Subtopics")
-        for index, child in enumerate(children):
-            if st.sidebar.button(
-                child["title"],
-                key=f"menu_subtopic_{len(st.session_state.path)}_{index}",
-                use_container_width=True,
-            ):
-                st.session_state.path.append(index)
-                st.rerun()
+            open_item(index, items)
 
 
 def render_stage() -> None:
     st.title(APP_TITLE)
     st.subheader("Explore the Montessori Capstone Map")
-    st.write("Choose a topic from the menu on the left.")
+    st.write("Choose a topic.")
+    render_topic_list(DATA, "main_topic")
 
 
 def render_node(node: dict[str, Any]) -> None:
+    if st.button("← Back", key="back_button"):
+        go_back()
+
     st.title(node["title"])
 
     center_text = markdown_for(node, "center")
@@ -320,7 +301,11 @@ def render_node(node: dict[str, Any]) -> None:
             render_markdown_with_images(center_text)
 
     if children:
-        st.info("Choose a subtopic from the menu.")
+        st.subheader("Subtopics")
+        render_topic_list(
+            children,
+            f"subtopic_{len(st.session_state.path)}",
+        )
     elif not center_text:
         with st.container(border=True):
             render_markdown_with_images(markdown_for(node))
@@ -337,9 +322,6 @@ def main() -> None:
             background-color: #FFFFFF;
             color: #111111;
         }
-        [data-testid="stSidebar"] {
-            background-color: #F4F6F8;
-        }
         [data-testid="stAppViewContainer"] h1,
         [data-testid="stAppViewContainer"] h2,
         [data-testid="stAppViewContainer"] h3,
@@ -354,7 +336,6 @@ def main() -> None:
     if "path" not in st.session_state:
         st.session_state.path = []
 
-    render_menu()
     node = get_node(st.session_state.path)
     if node is None:
         render_stage()
