@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Montessori Capstone Map</title>
+  <style>
+    :root{
+      --bg: #111111;
+      --ink: #111111;
+      --muted: #666666;
+      --ring: rgba(0,0,0,0.12);
+      --ring2: rgba(0,0,0,0.22);
+      --shadow: 0 18px 50px rgba(0,0,0,0.12);
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    /* Canvas */
+    #stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg);
+    }
+
+    /* Circle nodes */
+    .node {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      width: var(--d);
+      height: var(--d);
+      transform: translate(-50%, -50%);
+      border-radius: 9999px;
+      background: #fff;
+      border: 2px solid var(--ring2);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 450ms ease, width 450ms ease, height 450ms ease, opacity 350ms ease, box-shadow 450ms ease;
+    }
+
+    .node:hover {
+      box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+    }
+
+    .node .label {
+      text-align: center;
+      padding: 10px;
+      line-height: 1.1;
+      font-weight: 650;
+      font-size: clamp(12px, 1.6vw, 18px);
+    }
+
+    /* Links (optional visual separators) */
+    .hint {
+      position: absolute;
+      left: 18px;
+      bottom: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.2px;
+    }
+
+    /* Focus overlay */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.92);
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 250ms ease;
+    }
+
+    #overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .panel {
+      width: min(860px, calc(100vw - 40px));
+      border-radius: 26px;
+      background: #fff;
+      border: 2px solid var(--ring);
+      box-shadow: var(--shadow);
+      padding: 28px 26px 22px;
+    }
+
+    .panelHeader {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panelTitle {
+      font-size: clamp(22px, 3.2vw, 40px);
+      font-weight: 780;
+      line-height: 1.05;
+      margin: 0;
+    }
+
+    .closeBtn {
+      border: 1px solid var(--ring);
+      background: #fff;
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .closeBtn:hover { border-color: var(--ring2); }
+
+    .subText {
+      margin: 0 0 14px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* Floating child bubbles */
+    .childField {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    .childBubble {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) translate(var(--tx), var(--ty));
+      border-radius: 9999px;
+      border: 2px solid var(--ring2);
+      background: #fff;
+      padding: 16px 18px;
+      text-align: center;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.12);
+      transition: transform 200ms ease, box-shadow 200ms ease;
+      animation: drift 7s ease-in-out infinite;
+    }
+
+    .childBubble:hover {
+      transform: translate(-50%, -50%) translate(var(--tx), var(--ty)) scale(1.04);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+    }
+
+    /* Leaf view */
+    .leafTitle {
+      font-size: clamp(18px, 2.4vw, 28px);
+      font-weight: 760;
+      margin: 12px 0 0 0;
+      line-height: 1.1;
+    }
+
+    .breadcrumb {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    @keyframes float {
+      0%   { transform: translate(-50%, -50%) translateY(0) translateX(0); }
+      50%  { transform: translate(-50%, -50%) translateY(-10px) translateX(6px); }
+      100% { transform: translate(-50%, -50%) translateY(0) translateX(0); }
+    }
+
+    .node {
+      animation: float 10s ease-in-out infinite;
+    }
+
+    @keyframes drift {
+      0%   { transform: translate(-50%, -50%) translate(var(--tx), var(--ty)); }
+      50%  { transform: translate(-50%, -50%) translate(calc(var(--tx) * 0.85), calc(var(--ty) * 0.85)); }
+      100% { transform: translate(-50%, -50%) translate(var(--tx), var(--ty)); }
+    }
+
+    /* Fullscreen expanding bubble + dimmed backdrop */
+    #focus {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      background: rgba(0,0,0,0.0);
+      opacity: 0;
+      transition: opacity 300ms ease, background 300ms ease;
+    }
+
+    #focus.open {
+      pointer-events: auto;
+      opacity: 1;
+      background: rgba(0,0,0,1);
+    }
+
+    #focus.popupOpen .focusBubble {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .focusBubble {
+      position: absolute;
+      border-radius: 9999px;
+      background: #fff;
+      border: 2px solid var(--ring2);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      pointer-events: auto; /* clickable */
+      will-change: left, top, width, height;
+      transition: left 520ms ease, top 520ms ease, width 520ms ease, height 520ms ease;
+      display: grid;
+      place-items: center;
+    }
+
+    .focusBubble.parentView {
+      background: var(--bg);
+      border-color: rgba(255,255,255,0.22);
+      color: #fff;
+    }
+
+    .focusBubble.parentView .focusHeader {
+      border-bottom: 1px solid rgba(255,255,255,0.22);
+    }
+
+    .focusBubble.parentView .focusTitle,
+    .focusBubble.parentView .focusSub {
+      color: #fff;
+    }
+
+    .focusBubble.parentView .closeBtn {
+      background: transparent;
+      color: #fff;
+      border-color: rgba(255,255,255,0.35);
+    }
+
+    .focusBubble.open {
+      /* these get set inline by JS; class just marks state */
+    }
+
+    .focusInner {
+      width: min(100vw, 100%);
+      height: min(100vh, 100%);
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    /* Title area at top */
+    .focusHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 22px 14px;
+      border-bottom: 1px solid var(--ring);
+    }
+
+    .focusActions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .focusTitle {
+      margin: 0;
+      font-size: clamp(22px, 3.2vw, 40px);
+      font-weight: 800;
+      line-height: 1.05;
+    }
+
+    /* Content area */
+    .focusContent {
+      padding: 18px 22px 24px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      position: relative;
+    }
+
+    .focusSub {
+      margin: 0 0 14px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .focusContent.hasCenter .focusSub {
+      display: none;
+    }
+
+    .focusContent.hasCenter .childField {
+      position: absolute;
+      inset: 0;
+    }
+
+    .childField.topLine .childBubble {
+      top: 18%;
+      transform: translate(-50%, -50%) translate(var(--tx), 0);
+    }
+
+    .centerBlock {
+      position: absolute;
+      left: 50%;
+      top: auto;
+      bottom: 10%;
+      transform: translate(-50%, 0);
+      max-width: min(680px, 84vw);
+      text-align: center;
+      color: #000;
+      padding: 18px 22px;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.35);
+      z-index: 2;
+    }
+
+    .centerBlock:empty {
+      display: none;
+    }
+
+    .centerBlock p {
+      margin: 0 0 10px 0;
+    }
+
+    .centerBlock img {
+      width: min(420px, 70vw);
+      max-height: 220px;
+      object-fit: contain;
+      border-radius: 12px;
+      display: block;
+      margin: 12px auto;
+    }
+
+    /* Leaf popup */
+    .leafPopup {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      pointer-events: none;
+      background: #000;
+      z-index: 2;
+    }
+
+    .leafCard {
+      width: min(720px, calc(100vw - 40px));
+      border-radius: 22px;
+      background-color: #fff;
+      border: 2px solid var(--ring);
+      box-shadow: var(--shadow);
+      padding: 24px 22px;
+      pointer-events: auto;
+      opacity: 1;
+      max-height: calc(80vh - 48px);
+      overflow-y: auto;
+    }
+
+    .leafBody {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Keep your existing child styles */
+
+
+  </style>
+</head>
+<body>
+  <div id="stage" aria-label="Montessori concept map">
+    <div class="hint">Click a circle to zoom. Press Esc to go back.</div>
+
+    <!-- Overlay for focused/zoom view -->
+    
+  </div>
+
+  <div id="focus" aria-hidden="true"></div>
+
+
+  <script>
+    // Data model: parent items with children as circles when present.
+    const DATA = [
+      {
+        id: "montessori-scientist",
+        title: "Maria Montessori",
+        children: [
+          {
+            title: "Scientist",
+            content: "Maria Montessori graduated from the University of Rome with a certificate in physics - mathematics at the age of 20. She stayed at the university to study medicine, becoming an expert in pediatric medicine, and graduating as a doctor of medicine at the age of 26.\n\nShe approached education with a scientific lens. She systematically observed children in natural learning environments, and repeatedly noticed how concentration, self-discipline, and motivation emerged when obstacles were removed.",
+            contentHtml: "<p>Maria Montessori graduated from the University of Rome with a certificate in physics - mathematics at the age of 20. She stayed at the university to study medicine, becoming an expert in pediatric medicine, and graduating as a doctor of medicine at the age of 26.</p><p>She approached education with a scientific lens. She systematically observed children in natural learning environments, and repeatedly noticed how concentration, self-discipline, and motivation emerged when obstacles were removed.</p>"
+          },
+          {
+            title: "Reformer",
+            content: "Montessori challenged the education system that dominated the world. She rejected the idea that children need to be obedient, need external rewards, and lack the desire to good work. Her reforms extended to every part of the classroom - materials, classroom structure, schedule, the role of the teacher, and more. She replaced rigid structure with prepared environments and guided independence. She sought not to improve existing structures, but to redefine the entire concept of schooling.\n\nMontessori was also a fierce advocate for children with special needs. Her first job with children was working with special needs children, and this influenced her the rest of her life."
+          },
+          {
+            title: "Peacemaker",
+            content: "Montessori believed education was humanity's most powerful tool for achieving lasting peace. War and suffering were symptoms of deeper issues, ones that start as soon as we're born. The suppresion of independence, moral reasoning, empathy, and kindness are cause of suffering. Through education, Montessori believed we could foster responsibility, cooperation, and respect for our fellow human."
+          },
+          {
+            title: "Visionary",
+            content: "Maria Montessori created an entirely new method of education. Beyond that, she also contributed several now mainstream pedagogical ideas, such as sensitive periods, the importance of movement and environment in cognitive development, and contributions to the planes of development. Her approach to education also invoked the entire lifespan, from birth to death. She was not asking what a child needs to do right now, but rather, what does this human need to achieve their most sucessful life?"
+          },
+          {
+            title: "Feminist",
+            content: "Montessori was a fierce advocate for women's rights. As a woman pursuing an education in medicine, she faced daily discrimination, but persisted nonetheless. Montessori had a vision of the \"New Woman\" - one who has both equal rights, and equal responsibilities.\n\nIn the classroom, Montessori did not discriminate. Boys and girls got equal treatment. All children were expected to help out equally, and do their part. Through her classrooms, Montessori demonstrated that boys could clean, and girls could think, as long as they were given the opportunity to do so."
+          }
+        ]
+      },
+      {
+        id: "guiding-principles",
+        title: "Guiding Principles of Montessori Education",
+        contentHtml: "<ol><li>Respect the Child by allowing them to work at their own pace, correct their own mistakes, and do things for themselves.</li><li>Children go through different &quot;sensitive periods&quot; where they are more enabled to learn certain subjects and skills. Take advantage of these, by enabling them to learn what most fits their sensitive periods.</li><li>A prepared environment is crucial for the child to learn independently.</li><li>Educate each in their intellectual, physical, emotional, and social needs.</li><li>Guides are there to guide, not teach. With the proper environment, the child will learn best by teaching themself.</li><li>Embrace the uniqueness of each child by offering indivialized learning.</li><li>Mixed age classrooms encourage leadership, social growth, inclusion, and cooperation.</li><li>Give the child freedom within limits.</li><li>Learning is its own reward. There is no need for extrinsic motivation, for the child will find satisfaction in the ability to complete tasks independently.</li></ol>",
+        children: [] // no children provided in your list
+      },
+      {
+        id: "second-plane",
+        title: "Second Plane of Development",
+        centerHtml: "<p>The Second Plane of Development is one of 4 developmental stages identified by Maria Montessori, each representing a distinct way a human interacts with the world based on their age. Each plane of development lasts 6 years, with all 4 lasting from birth to 24 years old.</p><img src=\"images/four-planes.png\" alt=\"Four planes of development\" /><p style=\"font-size: 0.9em; color: #888;\">Source: https://www.newberryhouse.com/the-montessori-method-and-planes-of-development/</p><p>The second plane is the plane of &quot;conscious imagination&quot;. Children begin to desire intellectual independence, take charge of their learning, and develop moral curiosity.</p>",
+        children: [
+          {
+            title: "Sensitive periods",
+            contentHtml: "<p>In the Second Plane of Development, sensitive periods shift from unconscious absorption to <strong>heightened intellectual &amp; moral interests</strong>. Children are now showing sensitivity to justice, fairness, and the reasoning behind the way the world works. It is a period defined by the word &quot;why&quot;.</p><p>Children become deeply concerned with <strong>ethical consistency</strong>, often noticing contradictions in adult behavior or institutional structures. This is reflected in their peer relationships - children are testing social norms, often on each other.</p><p>This period is also sensitive to <strong>imagination and abstraction</strong>, which leads us to introduce subjects like history, geography, science, and mathematics, suitable for the newfound desire to find grand narratives, timelines, hierarchical structures, and other more intellectually complex concepts. Montessori accounts for this by offering impressionistic, grand narratives that weave together a comprehensive understanding of the whole of our world.</p>"
+          },
+          {
+            title: "Needs and Tendencies",
+            contentHtml: "<p>The Second Plane of Development is defined by a need for <strong>intellectual independence</strong>. The First Plane gives the child a need for physical independence, while the Second Plane introduces a need for cognitive independence. They resist instruction, but welcome tools that will help them think and learn. Failure to meet these needs is often the cause of disengagment, social conflict, and resistance to authority.</p><p>Children have the following needs in the Second Plane of Development:</p><ul><li>intellectual independence</li><li>social belonging</li><li>feeling useful to a group</li><li>meaningful work</li><li>collaborative learning</li><li>big picture concepts</li><li>logical structure</li><li>moral engagement</li><li>understanding societal systems</li></ul>"
+          },
+          {
+            title: "Characteristics",
+            contentHtml: "<p>In the second plane the child is moving from the concrete to the abstract. They still benefit from hands-on materials, but their works shifts to the mental side. The second plane has the following characteristics:</p><ul><li>increased capacity for logical reasoning</li><li>emerging critical thinking</li><li>ability to synthesize information</li><li>growing imaginitive capacity</li><li>grappling with moral reasoning, right &amp; wrong, fairness &amp; equality</li><li>desire for purpose beyond self</li><li>interest in societal roles</li><li>increased bonding with peers</li><li>awareness of group responsibilities</li><li>sensitivity to respect &amp; disrespect</li><li>heightened emotional fluctuations</li></ul>"
+          }
+        ]
+      },
+      {
+        id: "references",
+        title: "References",
+        contentHtml: "<ul><li>Montessori for Everyone. (n.d.). <em>The Five Great Lessons</em> [Episode 66]. https://montessoriforeveryone.com/The-Five-Great-Lessons_ep_66-1.html</li><li>MSL Educational Resources. (n.d.). <em>Montessori's Five Great Lessons</em>. https://www.msl-edu.org/montessoris-five-great-lessons</li><li>Midtown Montessori. (n.d.). <em>About Montessori</em>. https://midtownmontessori.org/about-montessori/</li><li>Montessori Training. (2017, May 10). <em>Montessori Today: Chapter 4 - Key Lessons</em>. https://montessoritraining.blogspot.com/2017/05/montessori-today-chapter-4-key-lessons.html</li><li>Miss Barbara. (n.d.). <em>Miss Barbara's Montessori Resources</em>. http://missbarbara.net/</li><li>Montessori Kiwi. (n.d.). <em>3 Part Cards for Montessori Elementary Grades</em>. https://montessorikiwi.com/blogs/news/3-part-cards-for-montessori-elementary-grades?srsltid=AfmBOoop7tKrxde7ITmgTBvA4dY-W35gJn4l7WLg5HYIiFd8RtNDJ_D7</li></ul>",
+        children: []
+      },
+      {
+        id: "lessons-montessori",
+        title: "Lessons in a Montessori Classroom",
+        children: [
+          {
+            title: "The Great Lessons",
+            contentHtml: "<img src=\"images/cosmic-education.png\" alt=\"Cosmic Education\" style=\"width: min(420px, 70vw); max-height: 220px; object-fit: contain; border-radius: 12px; display: block; margin: 12px auto;\" /><p>The Great Lessons are the backbone of Montessori cosmic education. They follow an order that not only represents the flow of curriculum in the classroom, but also represent a unique, insightful way of viewing history and our place in the universe.</p><p>I have long been interested in coming up with my own ways of categorizing the studies of our universe. My thinking used to focus on considering how many categories of study we can divide human knowledge into. Shall we have a separate category for space and chemistry, or should they be one category? Should human anthropology be a sub-category of sociology, or science? But it is impossible to categorize our studies in a way that is <strong>completely exhaustive and mutually exclusive</strong>.</p><p>The Montessori approach has an answer for this: rather than looking for an ontologically perfect system of organization, we follow a structure that is much more... fractally. Like a series of bubbles that we keep zooming in on, we start with <strong>everything</strong>.</p><p><strong>The First Great Lesson: Coming of the Universe and the Earth</strong></p><p>Once we have tackled that, we ask ourselves, what is the next step? What comes next in the story of us, after we examine the whole universe? We cannot focus on categorizing everything in the universe because then we would spend the vast majority of curriculum focusing on planets we know nothing about, in places unknown, and celestial objects that remain undiscovered. This would not be a very satifying study. So we move to the next biggest, broadest category of study that we want to focus on:</p><p><strong>The Second Great Lesson: Coming of Life</strong></p><p>After this, we start to see our ultimate goal more clearly. We need to answer questions about us. We want to know, what's the deal with humans? We can capture this in 3 questions: Where did we come from? Who are we? Where are we going? We have answered the first question, and now we seek to answer the second question.</p><p><strong>The Third Great Lesson: Coming of Human Beings</strong></p><p>Finally we will answer the third question. Also, seriously, what's up with human beings? Why do we dominate the world? Why are we more advanced than aardvarks and zebras, and what does advanced even mean? The final great lessons seek to answer these questions.</p><p><strong>The Fourth Great Lesson: The Story of Writing</strong></p><p><strong>The Fifth Great Lesson: The Story of Numbers</strong></p>"
+          },
+          {
+            title: "Key lessons",
+            contentHtml: "<p>Key Lessons are like mini great lessons (shall we say, good lessons?). They focus on more specific points of interest introduced by each of the great lessons. An examples from the first great lesson are Grandfather Rock, or Stellar Nucleosynthesis. You might introduce these to a group of students that has a particular excitement about stars.</p><p>After the second great lesson, you could introduce key lessons of the Long Black Line to show how much time has existed without the presence of humans, or the Timeline of Life</p><p>The third great lesson has key lessons focused on history. When we talk about the study of history, we usually REALLY mean the history of humans: these key lessons could be the Timeline of Civilizations, Timeline of Life, or Fundamental Needs.</p><p>For the 4th and 5th great lessons, these introduce an entire curriculum, so lessons will more so follow what is best suited for the child to learn.</p>"
+          },
+          {
+            id: "three-period-lessons",
+            title: "Three-period lessons",
+            centerHtml: "<p><strong>This is</strong></p><p><strong>Show me</strong></p><p><strong> What is this?</strong></p>",
+            children: [
+              {
+                title: "In the first plane of development",
+                contentHtml: "<p><strong>Period 1: This is...</strong></p><p>The first period is just focused on introducing nomenclature. The child is simply watching as the guide introduces them to the new concepts they are learning. In the first plane, this is often nomenclature.</p><p><strong>Period 2: Show me...</strong></p><p>This period is the most crucial, and should take the longest. This is about reviewing and reinforcing vocabulary. The child is now allowed to interact with material to enable a concrete, physical connection with the ideas being learned. For example, if a child is learning shapes, the guid might lay out a circle, triangle, and rectangle. The guide will then ask, \"can you hand me the triangle?\".</p><p><strong>Period 3: What is this?</strong></p><p>Now, the child is ready to identify things on their own. In the second period, they are asked to identify the object, and in the third period, they must indepently produce the name of the object. Rather than \"Show me the triangle\", we point to the triangle, and ask, \"What is this?\". This is the final step in solidifying the acquisition of a new concept.</p>"
+              },
+              {
+                title: "In the second plane of development",
+                contentHtml: "<p>The second plane gives way for more sophisticated learning, and as guides, we must be careful not to patronize the student. Egos are now at play, and the child demands more intellectual respect, but we ultimately still follow the framework of the three-period lesson. The main difference is in the 2nd and 3rd periods: these are done through independent and collaborative work. We often use three part cards, where the child must match terminology to it's pictures and descriptions. These are used in the first plane as well, but usually as 2 part cards (picture and term). In the second plane, we introduce more complex descriptions as a third part.</p><img src=\"images/3-part-cards.png\" alt=\"3 Part Cards\" />"
+              }
+            ]
+          },
+          {
+            title: "Follow-up work",
+            contentHtml: "<p>Follow-up work can be anything that enhances the development of the child's mind. It is on us as guides to be attuned to what our class needs. We need to be asking what gets each child excited about learning, and paying attention to the kind of engagement that each child craves.</p><p>One of my favorite follow-up works I have given was on the topic of plants. I have a class that is passionate about comics, and creating their own stories, so naturally, I though they would love an assignment that allowed them to create their own stories. I asked for them to each pick a plant, and make a character based on that plant. Once they created the plant, they needed to make a comic strip about their plant. This made them think about science in a more flexible way: If a dandelion had a personality, what would it be, and why? This encourage the students to research their plants, and draw connections between characteristics of plants and characteristics of humans.</p>"
+          }
+        ]
+      }
+    ];
+
+    const stage = document.getElementById("stage");
+    
+    const focusRoot = document.getElementById("focus");
+    let activeBubble = null;
+    let activePopup = null;
+    let popupKeepsFocus = false;
+
+    function closeFocus() {
+      if (!activeBubble) return;
+
+      focusRoot.classList.remove("open");
+      const bubble = activeBubble;
+      const start = bubble._startRect;
+
+      bubble.style.left = `${start.left}px`;
+      bubble.style.top = `${start.top}px`;
+      bubble.style.width = `${start.width}px`;
+      bubble.style.height = `${start.height}px`;
+
+      const cleanup = () => {
+        bubble.removeEventListener("transitionend", cleanup);
+        bubble.remove();
+        activeBubble = null;
+        focusRoot.setAttribute("aria-hidden", "true");
+      };
+
+      bubble.addEventListener("transitionend", cleanup);
+    }
+
+    function closePopup() {
+      if (!activePopup) return;
+      activePopup.remove();
+      activePopup = null;
+      if (!popupKeepsFocus) {
+        focusRoot.classList.remove("open");
+        focusRoot.setAttribute("aria-hidden", "true");
+      }
+      focusRoot.classList.remove("popupOpen");
+      popupKeepsFocus = false;
+    }
+
+    function openLeafPopup(title, bodyText, keepFocus, isHtml) {
+      popupKeepsFocus = Boolean(keepFocus);
+      if (!popupKeepsFocus && activeBubble) {
+        activeBubble.remove();
+        activeBubble = null;
+      }
+      if (activePopup) {
+        activePopup.remove();
+        activePopup = null;
+      }
+
+      focusRoot.classList.add("open");
+      focusRoot.classList.add("popupOpen");
+      focusRoot.setAttribute("aria-hidden", "false");
+
+      const popup = document.createElement("div");
+      popup.className = "leafPopup";
+      popup.innerHTML = `
+          <div class="leafCard">
+            <div class="panelHeader">
+              <h2 class="panelTitle">${escapeHtml(title)}</h2>
+              <button class="closeBtn js-close" type="button">Close</button>
+            </div>
+            <div class="leafBody" id="leafBody"></div>
+          </div>
+      `;
+
+      const bodyEl = popup.querySelector("#leafBody");
+      if (isHtml) {
+        bodyEl.innerHTML = bodyText || "";
+      } else {
+        bodyEl.innerHTML = textToParagraphs(bodyText);
+      }
+
+      popup.querySelector(".js-close").onclick = closePopup;
+      focusRoot.appendChild(popup);
+      activePopup = popup;
+    }
+
+    function openFocusFromNode(nodeEl, parentItem) {
+      if (!parentItem.children || parentItem.children.length === 0) {
+        openLeafPopup(
+          parentItem.title,
+          parentItem.contentHtml || parentItem.content || "",
+          false,
+          Boolean(parentItem.contentHtml)
+        );
+        return;
+      }
+
+      if (activeBubble) {
+        activeBubble.remove();
+        activeBubble = null;
+      }
+      if (activePopup) {
+        activePopup.remove();
+        activePopup = null;
+      }
+
+      const r = nodeEl.getBoundingClientRect();
+      const bubble = document.createElement("div");
+      bubble.className = "focusBubble";
+      bubble._startRect = r;
+      bubble.classList.add("parentView");
+
+      bubble.style.left = `${r.left}px`;
+      bubble.style.top = `${r.top}px`;
+      bubble.style.width = `${r.width}px`;
+      bubble.style.height = `${r.height}px`;
+
+      bubble.innerHTML = `
+      <div class="focusInner">
+        <div class="focusHeader">
+          <h1 class="focusTitle">${escapeHtml(parentItem.title)}</h1>
+          <div class="focusActions">
+            <button class="closeBtn js-back" type="button">Back</button>
+            <button class="closeBtn js-close" type="button">Close</button>
+          </div>
+        </div>
+        <div class="focusContent">
+          <p class="focusSub">
+            ${parentItem.children.length ? "Click a subtopic:" : ""}
+          </p>
+          <div class="centerBlock" id="focusCenter"></div>
+          <div class="childField" id="focusChildren"></div>
+        </div>
+      </div>
+      `;
+
+      bubble.querySelector(".js-back").onclick = closeFocus;
+      bubble.querySelector(".js-close").onclick = closeFocus;
+      focusRoot.appendChild(bubble);
+      focusRoot.setAttribute("aria-hidden", "false");
+      focusRoot.classList.add("open");
+      activeBubble = bubble;
+
+      const center = bubble.querySelector("#focusCenter");
+      if (parentItem.centerHtml) {
+        center.innerHTML = parentItem.centerHtml;
+        bubble.querySelector(".focusContent").classList.add("hasCenter");
+      }
+
+      requestAnimationFrame(() => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const d = Math.sqrt(w*w + h*h) * 2;
+
+        bubble.style.left = `${(w - d) / 2}px`;
+        bubble.style.top = `${(h - d) / 2}px`;
+        bubble.style.width = `${d}px`;
+        bubble.style.height = `${d}px`;
+      });
+
+      requestAnimationFrame(() => {
+        const field = bubble.querySelector("#focusChildren");
+        renderChildren(field, parentItem.children || [], parentItem);
+      });
+    }
+
+
+    let stack = []; // navigation stack: [parentTitle, childTitle...]
+
+    
+    // Create 3 parent circles
+    function createNodes() {
+      // Fixed positions (responsive-ish): left / center / right / bottom-right / bottom-left
+      const positions = [
+        { x: 20, y: 48, d: 220 },
+        { x: 50, y: 30, d: 250 },
+        { x: 80, y: 52, d: 220 },
+        { x: 75, y: 75, d: 150 },
+        { x: 25, y: 75, d: 150 }
+      ];
+
+      DATA.forEach((item, i) => {
+        const pos = positions[i] || { x: 50, y: 50, d: 220 };
+        const el = document.createElement("div");
+        el.className = "node";
+        el.style.setProperty("--x", `${pos.x}vw`);
+        el.style.setProperty("--y", `${pos.y}vh`);
+        el.style.setProperty("--d", `${pos.d}px`);
+        el.setAttribute("role", "button");
+        el.setAttribute("tabindex", "0");
+        el.dataset.id = item.id;
+
+        el.innerHTML = `<div class="label">${escapeHtml(item.title)}</div>`;
+
+        el.addEventListener("click", () => openFocusFromNode(el, item));
+
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openFocusFromNode(el, item);
+          }
+        });
+
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeFocus();
+        });
+
+
+        stage.appendChild(el);
+      });
+    }
+
+    // Overlay interactions
+    // Removed legacy overlay keyboard handler that referenced deleted overlay code.
+
+    
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function textToParagraphs(text) {
+      const safeText = String(text || "");
+      if (!safeText) return "";
+      return safeText
+        .split(/\n\s*\n/)
+        .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
+        .join("");
+    }
+
+    function renderChildren(field, children, parentItem) {
+      field.innerHTML = "";
+      if (!children.length) return;
+
+      const rect = field.getBoundingClientRect();
+      const baseMax = Math.min(rect.width, rect.height) / 2 - 40;
+      const isSecondPlane = parentItem && parentItem.id === "second-plane";
+      const isLessons = parentItem && parentItem.id === "lessons-montessori";
+      const isThreePeriod = parentItem && parentItem.id === "three-period-lessons";
+      const maxR = Math.max(isSecondPlane ? 200 : 140, baseMax);
+      const minR = Math.max(isSecondPlane ? 140 : 90, maxR * (isSecondPlane ? 0.7 : 0.6));
+
+      field.classList.toggle("topLine", isSecondPlane);
+
+      children.forEach((child, i) => {
+        const bubble = document.createElement("button");
+        bubble.type = "button";
+        bubble.className = "childBubble";
+        bubble.textContent = child.title;
+
+        let tx = 0;
+        let ty = 0;
+        let r = 70;
+
+        if (isLessons) {
+          bubble.style.top = i === 0 ? "20%" : i === 1 ? "50%" : "80%";
+          if (i === 0) { // The Great Lessons - top row
+            tx = 0;
+            ty = 0;
+            r = 80;
+          } else if (i === 1) { // Key lessons - second row
+            tx = 0;
+            ty = 0;
+            r = 65;
+          } else { // three small - third row, spaced wider
+            const spacing = rect.width * 0.55;
+            const start = -spacing;
+            tx = start + (i - 2) * spacing;
+            ty = 0;
+            r = 45;
+          }
+        } else if (isThreePeriod) {
+          const spacing = rect.width * 1.8;
+          tx = i === 0 ? -spacing / 2 : spacing / 2;
+          ty = 0;
+          r = 60;
+        } else if (isSecondPlane) {
+          const count = Math.max(children.length - 1, 1);
+          const spacing = Math.max(320, (rect.width * 0.8) / count);
+          const start = -((children.length - 1) * spacing) / 2;
+          tx = start + i * spacing;
+        } else {
+          const angle = (i / children.length) * Math.PI * 2 + (Math.random() * 0.6 - 0.3);
+          const r_calc = minR + Math.random() * (maxR - minR);
+          tx = Math.cos(angle) * r_calc;
+          ty = Math.sin(angle) * r_calc;
+        }
+
+        bubble.style.setProperty("--tx", `${tx}px`);
+        bubble.style.setProperty("--ty", `${ty}px`);
+        bubble.style.animationDelay = `${Math.random() * 2}s`;
+
+        bubble.addEventListener("click", () => {
+          if (child.children && child.children.length > 0) {
+            openFocusFromNode(bubble, child);
+          } else {
+            openLeafPopup(
+              child.title,
+              child.contentHtml || child.content || "",
+              true,
+              Boolean(child.contentHtml)
+            );
+          }
+        });
+
+        field.appendChild(bubble);
+      });
+    }
+
+    createNodes();
+  </script>
+</body>
+</html>
