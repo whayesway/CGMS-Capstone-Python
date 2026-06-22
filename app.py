@@ -14,13 +14,11 @@ Run locally:
 from __future__ import annotations
 
 import html
-import math
 import re
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-import plotly.graph_objects as go
 import streamlit as st
 
 DATA: list[dict[str, Any]] = [
@@ -118,10 +116,6 @@ DATA: list[dict[str, Any]] = [
 ]
 
 APP_TITLE = "Montessori Capstone Map"
-BACKGROUND = "#0066CC"
-BUBBLE_FILL = "#ffffff"
-BUBBLE_LINE = "rgba(0,0,0,0.35)"
-
 
 class HtmlToMarkdown(HTMLParser):
     """Small converter for the original contentHtml fields."""
@@ -251,139 +245,6 @@ def render_markdown_with_images(markdown: str) -> None:
         st.markdown(remaining)
 
 
-def wrap_label(label: str, width: int = 18) -> str:
-    words = label.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        trial = f"{current} {word}".strip()
-        if len(trial) <= width or not current:
-            current = trial
-        else:
-            lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return "<br>".join(lines)
-
-
-def parent_positions(items: list[dict[str, Any]]) -> tuple[list[float], list[float], list[int]]:
-    base = [
-        (20, 48, 90),
-        (50, 30, 105),
-        (80, 52, 90),
-        (75, 75, 65),
-        (25, 75, 65),
-    ]
-    x, y, sizes = [], [], []
-    for i, _ in enumerate(items):
-        px, py, size = base[i] if i < len(base) else (50, 50, 85)
-        x.append(px)
-        y.append(100 - py)
-        sizes.append(size)
-    return x, y, sizes
-
-
-def child_positions(children: list[dict[str, Any]], parent_id: str = "") -> tuple[list[float], list[float], list[int]]:
-    count = len(children)
-    if count == 0:
-        return [], [], []
-
-    if parent_id == "second-plane":
-        spacing = 25
-        start = 50 - spacing * (count - 1) / 2
-        return [start + i * spacing for i in range(count)], [70] * count, [75] * count
-
-    if parent_id == "lessons-montessori":
-        x = []
-        y = []
-        sizes = []
-        for i in range(count):
-            if i == 0:
-                x.append(50); y.append(78); sizes.append(80)
-            elif i == 1:
-                x.append(50); y.append(52); sizes.append(68)
-            else:
-                remainder = max(count - 2, 1)
-                x.append(20 + (i - 2) * (60 / max(remainder - 1, 1)) if remainder > 1 else 50)
-                y.append(25); sizes.append(55)
-        return x, y, sizes
-
-    if parent_id == "three-period-lessons":
-        return [30, 70], [50, 50], [72, 72]
-
-    radius_x = 32
-    radius_y = 26
-    x = []
-    y = []
-    sizes = []
-    for i in range(count):
-        angle = 2 * math.pi * i / count - math.pi / 2
-        x.append(50 + math.cos(angle) * radius_x)
-        y.append(50 + math.sin(angle) * radius_y)
-        sizes.append(70 if count <= 3 else 60)
-    return x, y, sizes
-
-
-def bubble_chart(items: list[dict[str, Any]], *, level: str, parent_id: str = "") -> Any:
-    if level == "parent":
-        x, y, sizes = parent_positions(items)
-    else:
-        x, y, sizes = child_positions(items, parent_id)
-
-    labels = [wrap_label(item["title"]) for item in items]
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=x,
-            y=y,
-            mode="markers+text",
-            marker=dict(size=sizes, color=BUBBLE_FILL, line=dict(color=BUBBLE_LINE, width=2)),
-            text=labels,
-            textposition="middle center",
-            textfont=dict(color="#111111", size=14, family="Arial Black"),
-            customdata=list(range(len(items))),
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-    fig.update_layout(
-        height=560 if level == "parent" else 430,
-        margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor=BACKGROUND,
-        plot_bgcolor=BACKGROUND,
-        xaxis=dict(range=[0, 100], visible=False, fixedrange=True),
-        yaxis=dict(range=[0, 100], visible=False, fixedrange=True),
-        showlegend=False,
-        dragmode=False,
-    )
-    return st.plotly_chart(
-        fig,
-        use_container_width=True,
-        key=f"chart_{level}_{len(st.session_state.path)}_{parent_id}",
-        on_select="rerun",
-        selection_mode="points",
-        config={"displayModeBar": False, "responsive": True},
-    )
-
-
-def selected_index(chart_state: Any) -> int | None:
-    try:
-        points = chart_state.selection.points
-    except Exception:
-        try:
-            points = chart_state.get("selection", {}).get("points", [])
-        except Exception:
-            points = []
-    if not points:
-        return None
-    point = points[0]
-    if hasattr(point, "customdata"):
-        return int(point.customdata)
-    if isinstance(point, dict) and "customdata" in point:
-        return int(point["customdata"])
-    return None
-
-
 def get_node(path: list[int]) -> dict[str, Any] | None:
     if not path:
         return None
@@ -398,14 +259,6 @@ def open_item(index: int, items: list[dict[str, Any]]) -> None:
     st.rerun()
 
 
-def nav_buttons(items: list[dict[str, Any]]) -> None:
-    cols = st.columns(min(len(items), 3))
-    for i, item in enumerate(items):
-        with cols[i % len(cols)]:
-            if st.button(item["title"], key=f"btn_{len(st.session_state.path)}_{i}", use_container_width=True):
-                open_item(i, items)
-
-
 def go_back() -> None:
     if st.session_state.path:
         st.session_state.path.pop()
@@ -417,57 +270,91 @@ def go_home() -> None:
     st.rerun()
 
 
+def render_menu() -> None:
+    st.sidebar.title("Menu")
+
+    if st.sidebar.button("Home", key="menu_home", use_container_width=True):
+        go_home()
+    if st.session_state.path and st.sidebar.button(
+        "← Back", key="menu_back", use_container_width=True
+    ):
+        go_back()
+
+    st.sidebar.markdown("### Topics")
+    for index, item in enumerate(DATA):
+        if st.sidebar.button(
+            item["title"], key=f"menu_topic_{index}", use_container_width=True
+        ):
+            st.session_state.path = [index]
+            st.rerun()
+
+    node = get_node(st.session_state.path)
+    children = node.get("children", []) if node else []
+    if children:
+        st.sidebar.divider()
+        st.sidebar.markdown("### Subtopics")
+        for index, child in enumerate(children):
+            if st.sidebar.button(
+                child["title"],
+                key=f"menu_subtopic_{len(st.session_state.path)}_{index}",
+                use_container_width=True,
+            ):
+                st.session_state.path.append(index)
+                st.rerun()
+
+
 def render_stage() -> None:
     st.title(APP_TITLE)
-    st.caption("Click a bubble to zoom, or use the buttons below the map.")
-    chart_state = bubble_chart(DATA, level="parent")
-    idx = selected_index(chart_state)
-    if idx is not None:
-        open_item(idx, DATA)
-    nav_buttons(DATA)
+    st.subheader("Explore the Montessori Capstone Map")
+    st.write("Choose a topic from the menu on the left.")
 
 
 def render_node(node: dict[str, Any]) -> None:
-    left, right = st.columns([1, 1])
-    with left:
-        if st.button("← Back", use_container_width=True):
-            go_back()
-    with right:
-        if st.button("Home", use_container_width=True):
-            go_home()
-
     st.title(node["title"])
 
+    center_text = markdown_for(node, "center")
     children = node.get("children") or []
+
+    if center_text:
+        with st.container(border=True):
+            render_markdown_with_images(center_text)
+
     if children:
-        center_text = markdown_for(node, "center")
-        if center_text:
-            with st.container(border=True):
-                render_markdown_with_images(center_text)
-        st.caption("Click a subtopic, or use the buttons below.")
-        chart_state = bubble_chart(children, level="child", parent_id=node.get("id", ""))
-        idx = selected_index(chart_state)
-        if idx is not None:
-            open_item(idx, children)
-        nav_buttons(children)
-    else:
+        st.info("Choose a subtopic from the menu.")
+    elif not center_text:
         with st.container(border=True):
             render_markdown_with_images(markdown_for(node))
 
 
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon="◯", layout="wide")
-    st.markdown("""
+    st.markdown(
+        """
         <style>
-        [data-testid="stAppViewContainer"] {
-            background-color: #0066CC;
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stHeader"] {
+            background-color: #FFFFFF;
+            color: #111111;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #F4F6F8;
+        }
+        [data-testid="stAppViewContainer"] h1,
+        [data-testid="stAppViewContainer"] h2,
+        [data-testid="stAppViewContainer"] h3,
+        [data-testid="stAppViewContainer"] p {
+            color: #111111;
         }
         </style>
-        """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
     if "path" not in st.session_state:
         st.session_state.path = []
 
+    render_menu()
     node = get_node(st.session_state.path)
     if node is None:
         render_stage()
