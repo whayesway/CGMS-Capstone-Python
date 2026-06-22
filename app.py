@@ -118,7 +118,7 @@ DATA: list[dict[str, Any]] = [
 ]
 
 APP_TITLE = "Montessori Capstone Map"
-BACKGROUND = "#111111"
+BACKGROUND = "#0066CC"
 BUBBLE_FILL = "#ffffff"
 BUBBLE_LINE = "rgba(0,0,0,0.35)"
 
@@ -457,6 +457,14 @@ def render_node(node: dict[str, Any]) -> None:
 
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon="◯", layout="wide")
+    st.markdown("""
+        <style>
+        [data-testid="stAppViewContainer"] {
+            background-color: #0066CC;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     if "path" not in st.session_state:
         st.session_state.path = []
 
